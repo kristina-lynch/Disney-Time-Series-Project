@@ -1,0 +1,110 @@
+---
+title: "Time Series Project"
+output: html_document
+date: "2024-02-20"
+---
+
+
+```{r}
+# Load the data
+files <- list.files(path="C:/Users/colto/Downloads/Magic_Kingdom", pattern="csv", all.files=TRUE, 
+    full.names=TRUE)
+```
+
+```{r}
+reader <- function(file) {
+  df <- read.csv(file, header = TRUE)
+  df$date <- as.Date(df$date, format = "%m/%d/%Y")
+  df <- df[df$SPOSTMIN >= 0, ]
+  return(df)
+}
+```
+
+```{r}
+all_data <- data.frame()
+for (i in files) {
+  assign(paste0("df",basename(i)),reader(i))
+  all_data <- rbind(all_data, get(paste0("df",basename(i))))
+}
+```
+
+```{r}
+library(tidyr)
+all_data <- all_data[order(all_data$date),]
+all_data_full <- all_data[!is.na(all_data$date),]
+```
+
+```{r}
+write.csv(all_data_full, "C:/Users/colto/OneDrive/2024/Academic/Time Series Forecasting/all_data_full.csv")
+```
+
+```{r}
+all_data_full <- read.csv("C:/Users/colto/OneDrive/2024/Academic/Time Series Forecasting/all_data_full.csv")
+```
+
+
+```{r}
+mean_by_date <- aggregate(all_data_full$SPOSTMIN, by = list(all_data_full$date), FUN = mean)
+mean_by_date <- mean_by_date[order(mean_by_date$Group.1),]
+mean_by_date$Group.1 <- as.Date(mean_by_date$Group.1)
+mean_by_date_pre_covid <- mean_by_date[mean_by_date$Group.1 < "2020-03-01",]
+```
+
+
+```{r}
+plot(mean_by_date_pre_covid$Group.1, mean_by_date_pre_covid$x, type = "l", xlab = "Date", ylab = "Average Wait Time", main = "Average Wait Time by Date")
+```
+
+```{r}
+library(forecast)
+waittime.ts <- ts(mean_by_date_pre_covid$x, start = c(2015),
+end = c(2020), freq = 12)
+```
+
+```{r}
+waittime_lm <- tslm(waittime.ts ~ trend + season)
+summary(waittime_lm)
+```
+
+```{r}
+plot(waittime_lm$residuals)
+waittime_res <- waittime_lm$residuals
+```
+
+
+```{r}
+par(mfrow=c(1,2))
+ACF<-Acf(waittime_res, col="darkred", main="ACF Results")
+PACF<-Pacf(waittime_res, col="purple", main="PACF Results")
+```
+
+
+```{r}
+nValid <- 48
+nTrain <- length(waittime.ts) - nValid
+train.ts <- window(waittime.ts, start = c(2015, 1), end = c(2015, nTrain))
+valid.ts <- window(waittime.ts, start = c(2015, nTrain + 1), end = c(2015, nTrain + nValid))
+waittime.lm <- tslm(train.ts ~ trend + season)
+waittime.lm.pred <- forecast(waittime.lm, h = nValid, level = 0)
+```
+```{r}
+plot(waittime.lm.pred, ylim = c(10, 50), ylab = "Waittime",
+xlab = "Time", bty = "l", xaxt = "n",
+xlim = c(2015,2020.5), main = "", flty = 2)
+axis(1, at = seq(2015,2020, 1), labels = format(seq(2015,2020, 1)))
+lines(waittime.lm$fitted, lwd = 2)
+lines(valid.ts)
+lines(c(2020.25 - 3, 2020.25 - 3), c(0, 3500))
+lines(c(2020.25, 2020.25), c(0, 3500))
+text(2015.25, 2500, "Training")
+text(2015.75, 2500, "Validation")
+text(2020.25, 2500, "Future")
+
+```
+
+
+
+
+
+
+
